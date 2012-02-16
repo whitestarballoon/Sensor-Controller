@@ -1,6 +1,6 @@
 boolean DEBUG = 0;// 1 enable 0 disable
-//#define SLEEPENABLE
-//#define WATCHDOGENABLE
+#define SLEEPENABLE
+#define WATCHDOGENABLE
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 #include <avr/power.h>
@@ -14,18 +14,12 @@ boolean DEBUG = 0;// 1 enable 0 disable
 #define HUMID_ANALOGPIN 7     //for humidity sensors output
 #define cloud_ANALOGPIN 6    //for cloud sensors output
 
-/* Camera PINS 
- POWERWIRE 5v CAMERA RED
- GNDWIRE CAMERA GREEN */
-#define CAMSWITCH 6 //      --control Camera power
-#define CAMPOWER 7 // Violet -- CAMPower
-#define CAMMODE 8 // Brown -- Mode
-#define CAMRECORD 9// Orange -- CAMRecord
-#define CAMPOWER_LED 10 //yellow -- CAMPOWER_LED
+/* Camera PINS  */
+#define CAMSWITCH 7 //      --control Camera power
+
 
 unsigned long looptime; 
-unsigned long recordtime;
-boolean CAMTIMERECORD = 0;
+
 boolean sleepenabled = 0;
 static int MY_I2C_ADDRESS = 0xA;  //my address  0x14
 int isb_command;  // command given by da boss
@@ -41,7 +35,9 @@ static uint16_t freshcloud;
 static uint16_t freshtemp;
 static uint16_t freshhumid;
 volatile boolean f_wdt=1; //watchdog global flag
-
+int CamState = 0;
+unsigned long CamTimer;
+int recording = 0;
 unsigned int wakecnt; //counts the number of times the system has gone through global loop after waking up
 /*
 FIO with Series 2 (ZigBee) XBee Radios only
@@ -201,20 +197,27 @@ void requestEvent()
       }
       break;
     }//end xbee temp sensor case
+
   case 0xE:
-    { //record camera for 1 min
-      CAMTIMERECORD = 1;
-      break;
+    { //record camera for 5 min
+      if (1 == DEBUG)
+      {
+        Serial.println("CMD CAMERA 5 Min Record");
+      }
+      	CamTimer= millis()+300000;
+	recording=2;
+	Camstate=10;
+      	break;
     }
+
   case 0xC:
     { //start camera record on command
       if (1 == DEBUG)
       {
         Serial.println("CMD CAMERA ON");
       }
-      CAMPowerControl(1);
-      CAMPowerOn();
-      CAMToggleRecord();
+      CamState=10;
+	recording=1;
       break;
     }
 
@@ -224,8 +227,7 @@ void requestEvent()
       {
         Serial.println("CMD CAMERA OFF");
       }
-      CAMPowerOff();
-      CAMPowerControl(0);
+      CamState=0;
       break;
     }
 
@@ -524,123 +526,75 @@ int eval_therm(unsigned int tval, unsigned int vval)
 
 void CameraSetup()
 {
-  // initialize pins for hign impedence
-  pinMode(CAMPOWER, INPUT);
-  pinMode(CAMMODE, INPUT);
-  pinMode(CAMRECORD, INPUT);
-  pinMode(CAMPOWER_LED, INPUT);
+  // initialize pins for high impedence
   pinMode(CAMSWITCH,INPUT);
 }
-void CAMPowerControl(boolean state)
+
+
+void CameraState()
 {
-  if (1 == state)
-  {
-    digitalWrite(CAMSWITCH, HIGH);
-    if (1 == DEBUG)
-    {
-      Serial.println("Cam power enabled");
-    }
-  }
-  if (0 == state)
-  {
-
-    digitalWrite(CAMSWITCH, LOW);
-    if (1 == DEBUG)
-    {
-      Serial.println("Cam power disabled");
-    }
-  }
-
-}
-void CAMPowerOff()
-{
-  if (1 == DEBUG)
-  {
-    Serial.println("Power Off");
-  }
-  if ( CAMisPowerOn() )
-  {
-    pinMode(CAMPOWER, OUTPUT);
-    digitalWrite(CAMPOWER,HIGH);
-    newdelay(200);
-    digitalWrite(CAMPOWER,LOW);
-    pinMode(CAMPOWER,INPUT);
-  }
-}
-
-void CAMPowerOn()
-{
-  if (1 == DEBUG)
-  {
-    Serial.println("Power On");
-  }
-  if ( ! CAMisPowerOn() )
-  {
-    pinMode(CAMPOWER, OUTPUT);
-    digitalWrite(CAMPOWER,HIGH);
-    newdelay(200);
-    digitalWrite(CAMPOWER,LOW);
-    pinMode(CAMPOWER,INPUT);
-
-    newdelay(6000);
-    // Change the mode to Video
-    if (1 == DEBUG)
-    {
-      Serial.println("Change Mode");
-    }
-    digitalWrite(CAMMODE,HIGH);
-    pinMode(CAMMODE,OUTPUT);
-    digitalWrite(CAMMODE,LOW);
-    newdelay(200);
-    digitalWrite(CAMMODE,HIGH);
-    newdelay(4000);
-    if (1 == DEBUG)
-    {
-      Serial.println("Press 2nd Time");
-    }
-    digitalWrite(CAMMODE,LOW);
-    newdelay(200);
-    digitalWrite(CAMMODE,HIGH);
-    pinMode(CAMMODE,INPUT);
-    newdelay(3000); // Need to wait at least 3 sec before recording
-  }
+//camera off	
+	if ( 0 == CamState )
+	{
+		pinMode(CAMSWITCH,OUTPUT);
+		digitalWrite(CAMSWITCH,LOW);
+		CamTimer= millis() + 250;
+		CamState = 1;
+	}
+	if ( 1 == CamState && millis() >= CamTimer )
+	{
+		pinMode(CAMSWITCH,INPUT);
+		CamTimer= millis() + 3000;
+		CamState = 2;
+	}
+	if ( 2 == CamState && millis() >= CamTimer )
+	{
+		pinMode(CAMSWITCH,OUTPUT);
+		digitalWrite(CAMSWITCH,LOW);
+		CamTimer= millis() + 3000;
+		CamState = 3;
+	}
+	if ( 3 == CamState && millis() >= CamTimer )
+	{
+		pinMode(CAMSWITCH,INPUT);
+		CamState = 0;
+		recording = 0;
+	}	
+//Camera on
+	if ( 10 == CamState )
+	{
+		pinMode(CAMSWITCH,OUTPUT);
+		digitalWrite(CAMSWITCH,LOW);
+		CamTimer= millis() + 250;
+		CamState = 11;
+	}
+	if ( 11 == CamState && millis() >= CamTimer )
+	{
+		pinMode(CAMSWITCH,INPUT);
+		CamTimer= millis() + 3000;
+		CamState = 12;
+	}
+	if ( 12 == CamState && millis() >= CamTimer )
+	{
+		pinMode(CAMSWITCH,OUTPUT);
+		digitalWrite(CAMSWITCH,LOW);
+		CamTimer= millis() + 250;
+		CamState = 13;
+	}
+	if ( 13 == CamState && millis() >= CamTimer )
+	{
+		pinMode(CAMSWITCH,INPUT);
+		CamTimer= millis() + 3000;
+		CamState = 20;
+	}
+// Cam Recording for 5
+	if ( 2 == recording && millis() >= CamTimer )
+	{	
+		CamState = 0;
+	}
+	
 }
 
-int CAMisPowerOn()
-{
-  //return (digitalRead(CAMPOWER_LED) > 0);
-  if (digitalRead(CAMPOWER_LED) > 0)
-  {
-    if (1 == DEBUG)
-    {
-      Serial.println("CAM Power is On");
-    }
-    return true;
-  } 
-  else {
-    if (1 == DEBUG)
-    {
-      Serial.println("CAM Power is Off");
-    }
-    return false;
-  }
-}
-
-void CAMToggleRecord()
-{
-  // Press Record button
-  if (1 == DEBUG)
-  {
-    Serial.println("Start Recording");
-  }
-  digitalWrite(CAMRECORD,HIGH);
-  pinMode(CAMRECORD,OUTPUT);
-  digitalWrite(CAMRECORD,LOW);
-  newdelay(200);
-  digitalWrite(CAMRECORD,HIGH);
-  pinMode(CAMRECORD,INPUT);
-  newdelay(2000); // Need to wait at least 2 seconds before something else
-}
 
 /* ---------- main body of program -------------- */
 
@@ -653,7 +607,6 @@ void debugsetup()
 
 void setup()
 {
-
 
   init_cloud_sensor();
   //Initially join the bus as slave device with address 0xA sensor board
@@ -679,8 +632,8 @@ void loop()
     f_wdt=0;       // reset flag
   }
 #endif
-  boolean camrecording = 0;
 
+CameraState;
   while (millis() >= looptime)
   {
     freshcloud = read_cloud_sensor();
@@ -731,35 +684,7 @@ void loop()
       newdelay(1);
     }
   }
-  if( 0 == camrecording) 
-  {  
-    if (1 == CAMTIMERECORD)
-    {  
-      CAMPowerControl(1);
-      CAMPowerOn();
-      CAMToggleRecord();
-      recordtime = millis()+60000;
-      camrecording = 1;
-      if (1 == DEBUG)
-      {
-        Serial.println("START TIME RECORD");
-      }
-    }
-  }
-  else{
-    if (millis() >= recordtime)
-    {     
 
-      CAMPowerOff();
-      camrecording = 0;
-      CAMPowerControl(0);
-      if (1 == DEBUG)
-      {
-        Serial.println("DONE TIME RECORD");
-      }
-
-    }
-  }
 #ifdef SLEEPENABLE 
   system_sleep();  //go to sleep 
 #endif
