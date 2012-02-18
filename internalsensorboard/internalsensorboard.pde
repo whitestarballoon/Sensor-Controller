@@ -1,6 +1,6 @@
-boolean DEBUG = 0;// 1 enable 0 disable
-#define SLEEPENABLE
-#define WATCHDOGENABLE
+boolean DEBUG = 1;// 1 enable 0 disable
+boolean SLEEPENABLE = 0;
+//#define WATCHDOGENABLE
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 #include <avr/power.h>
@@ -19,8 +19,6 @@ boolean DEBUG = 0;// 1 enable 0 disable
 
 
 unsigned long looptime; 
-
-boolean sleepenabled = 0;
 static int MY_I2C_ADDRESS = 0xA;  //my address  0x14
 int isb_command;  // command given by da boss
 /* ----- Variables support polling SHARP GP2Y1010AU0F dust sensor --- */
@@ -141,7 +139,7 @@ void requestEvent()
   byte reply_data[2];
   if (1 == DEBUG)
   {
-    Serial.print("itc");
+    Serial.print("itc ");
     Serial.println(isb_command);
   }
 
@@ -206,7 +204,7 @@ void requestEvent()
       }
       	CamTimer= millis()+300000;
 	recording=2;
-	Camstate=10;
+	CamState=10;
       	break;
     }
 
@@ -684,9 +682,12 @@ CameraState;
       newdelay(1);
     }
   }
-
-#ifdef SLEEPENABLE 
+if( 0 == recording ){
+if  ( 1 == SLEEPENABLE )
+{
+Serial.println("Going to sleep");
   system_sleep();  //go to sleep 
-#endif
+}
+}
 }//end loop()
 
