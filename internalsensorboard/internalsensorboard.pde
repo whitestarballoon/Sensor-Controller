@@ -1,5 +1,5 @@
 boolean DEBUG = 1;// 1 enable 0 disable
-//#define WATCHDOGENABLE
+#define WATCHDOGENABLE
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 #include <avr/power.h>
@@ -15,7 +15,7 @@ boolean DEBUG = 1;// 1 enable 0 disable
 
 /* Camera PINS  */
 #define CAMSWITCH 7 //      --control Camera power
- 
+
 
 unsigned long looptime; 
 static int MY_I2C_ADDRESS = 0xA;  //my address  0x14
@@ -34,6 +34,7 @@ static uint16_t freshhumid;
 volatile boolean f_wdt=1; //watchdog global flag
 int CamState = 0;
 unsigned long CamTimer;
+unsigned long autoCamTimer;
 int recording = 0;
 unsigned int wakecnt; //counts the number of times the system has gone through global loop after waking up
 /*
@@ -104,7 +105,61 @@ void receiveEvent(int howMany)
     Serial.print( "i2cr ");
     Serial.println(isb_command);
   }
- 
+  switch (isb_command) 
+  { //toggle debuging mostly enable it
+
+  case 0x1:
+    { 
+      if (1 == DEBUG) 
+      {
+        Serial.println("debug off");
+          DEBUG = 0;
+      }
+      else
+      {
+        if (0 == DEBUG)
+        {
+          debugsetup();
+          DEBUG = 1;
+          Serial.println("debug on");
+          }
+        }
+        break;
+    }  
+  case 0xE:
+    { //record camera for 5 min
+      if (1 == DEBUG)
+      {
+        Serial.println("CMD CAMERA 5 Min Record");
+      }
+      autoCamTimer= millis()+300000;
+      recording=2;
+      CamState=10;
+      break;
+    }
+
+  case 0xC:
+    { //start camera record on command
+      if (1 == DEBUG)
+      {
+        Serial.println("CMD CAMERA ON");
+      }
+      CamState=10;
+      recording=1;
+      break;
+    }
+
+  case 0xD:
+    {  //stop camera on command
+      if (1 == DEBUG)
+      {
+        Serial.println("CMD CAMERA OFF");
+      }
+      CamState=0;
+      break;
+    }
+  }
+
 }//end receiveEvent()
 
 
@@ -122,28 +177,7 @@ void requestEvent()
   switch (isb_command) 
   { //toggle debuging mostly enable it
 
-  case 0x1:
-    { 
-      if (1 == DEBUG) 
-      {
-        DEBUG = 0;
-      }
-      else
-      {
-        if (0 == DEBUG)
-        {
-          debugsetup();
-          DEBUG = 1;
-        }
-      }
-      break;
-    }  
 
-
-  case 0x2:
-    { //toggle sleepmode
-      break;
-    }
   case 0x4:
     { //humidty sensor
       reply_data[0] = (byte) (freshhumid / 256);
@@ -169,39 +203,6 @@ void requestEvent()
       }
       break;
     }//end xbee temp sensor case
-
-  case 0xE:
-    { //record camera for 5 min
-      if (1 == DEBUG)
-      {
-        Serial.println("CMD CAMERA 5 Min Record");
-      }
-      	CamTimer= millis()+300000;
-	recording=2;
-	CamState=10;
-      	break;
-    }
-
-  case 0xC:
-    { //start camera record on command
-      if (1 == DEBUG)
-      {
-        Serial.println("CMD CAMERA ON");
-      }
-      CamState=10;
-	recording=1;
-      break;
-    }
-
-  case 0xD:
-    {  //stop camera on command
-      if (1 == DEBUG)
-      {
-        Serial.println("CMD CAMERA OFF");
-      }
-      CamState=0;
-      break;
-    }
 
   case 0x9:
     {//particulate sensor  
@@ -229,10 +230,6 @@ void requestEvent()
 
   }//end switch isb_command
 } //end requestEvent()
-
-
-
-
 
 
 /* ---------- Sensor stuff -------------- */
@@ -499,72 +496,75 @@ int eval_therm(unsigned int tval, unsigned int vval)
 void CameraSetup()
 {
   // initialize pins for high impedence
+  pinMode(CAMSWITCH,OUTPUT);
+  digitalWrite(CAMSWITCH,HIGH);
   pinMode(CAMSWITCH,INPUT);
 }
 
 
 void CameraState()
 {
-//camera off	
-	if ( 0 == CamState )
-	{
-		pinMode(CAMSWITCH,OUTPUT);
-		digitalWrite(CAMSWITCH,LOW);
-		CamTimer= millis() + 250;
-		CamState = 1;
-	}
-	if ( 1 == CamState && millis() >= CamTimer )
-	{
-		pinMode(CAMSWITCH,INPUT);
-		CamTimer= millis() + 3000;
-		CamState = 2;
-	}
-	if ( 2 == CamState && millis() >= CamTimer )
-	{
-		pinMode(CAMSWITCH,OUTPUT);
-		digitalWrite(CAMSWITCH,LOW);
-		CamTimer= millis() + 3000;
-		CamState = 3;
-	}
-	if ( 3 == CamState && millis() >= CamTimer )
-	{
-		pinMode(CAMSWITCH,INPUT);
-		CamState = 0;
-		recording = 0;
-	}	
-//Camera on
-	if ( 10 == CamState )
-	{
-		pinMode(CAMSWITCH,OUTPUT);
-		digitalWrite(CAMSWITCH,LOW);
-		CamTimer= millis() + 250;
-		CamState = 11;
-	}
-	if ( 11 == CamState && millis() >= CamTimer )
-	{
-		pinMode(CAMSWITCH,INPUT);
-		CamTimer= millis() + 3000;
-		CamState = 12;
-	}
-	if ( 12 == CamState && millis() >= CamTimer )
-	{
-		pinMode(CAMSWITCH,OUTPUT);
-		digitalWrite(CAMSWITCH,LOW);
-		CamTimer= millis() + 250;
-		CamState = 13;
-	}
-	if ( 13 == CamState && millis() >= CamTimer )
-	{
-		pinMode(CAMSWITCH,INPUT);
-		CamTimer= millis() + 3000;
-		CamState = 20;
-	}
-// Cam Recording for 5
-	if ( 2 == recording && millis() >= CamTimer )
-	{	
-		CamState = 0;
-	}
-	
+  //camera off	
+  if ( 0 == CamState )
+  {
+    pinMode(CAMSWITCH,OUTPUT);
+    digitalWrite(CAMSWITCH,LOW);
+    CamTimer= millis() + 250;
+    CamState = 1;
+  }
+  if ( 1 == CamState && millis() >= CamTimer )
+  {
+    pinMode(CAMSWITCH,INPUT);
+    CamTimer= millis() + 3000;
+    CamState = 2;
+  }
+  if ( 2 == CamState && millis() >= CamTimer )
+  {
+    pinMode(CAMSWITCH,OUTPUT);
+    digitalWrite(CAMSWITCH,LOW);
+    CamTimer= millis() + 3000;
+    CamState = 3;
+  }
+  if ( 3 == CamState && millis() >= CamTimer )
+  {
+    pinMode(CAMSWITCH,INPUT);
+    CamState = 20;
+    recording = 0;
+  }	
+  //Camera on
+  if ( 10 == CamState )
+  {
+    pinMode(CAMSWITCH,OUTPUT);
+    digitalWrite(CAMSWITCH,LOW);
+    CamTimer= millis() + 250;
+    CamState = 11;
+  }
+  if ( 11 == CamState && millis() >= CamTimer )
+  {
+    pinMode(CAMSWITCH,INPUT);
+    CamTimer= millis() + 3000;
+    CamState = 12;
+  }
+  if ( 12 == CamState && millis() >= CamTimer )
+  {
+    pinMode(CAMSWITCH,OUTPUT);
+    digitalWrite(CAMSWITCH,LOW);
+    CamTimer= millis() + 250;
+    CamState = 13;
+  }
+  if ( 13 == CamState && millis() >= CamTimer )
+  {
+    pinMode(CAMSWITCH,INPUT);
+    CamTimer= millis() + 3000;
+    CamState = 20;
+  }
+  // Cam Recording for 5
+  if ( 2 == recording && millis() >= autoCamTimer )
+  {	
+    CamState = 0;
+    recording = 0;
+  }
+
 }
 
 
@@ -605,7 +605,7 @@ void loop()
   }
 #endif
 
-CameraState;
+  CameraState();
   while (millis() >= looptime)
   {
     freshcloud = read_cloud_sensor();
@@ -657,4 +657,8 @@ CameraState;
     }
   }
 }//end loop()
+
+
+
+
 
