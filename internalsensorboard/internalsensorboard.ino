@@ -1,8 +1,6 @@
 boolean DEBUG = 1;// 1 enable 0 disable
 #define WATCHDOGENABLE
 #include <avr/wdt.h>
-#include <avr/sleep.h>
-#include <avr/power.h>
 #include <XBee.h>
 #include <Wire.h>
 /* define/reserve the pins */
@@ -16,6 +14,7 @@ boolean DEBUG = 1;// 1 enable 0 disable
 /* Camera PINS  */
 #define CAMSWITCH 7 //  camera control pin
 unsigned long debugtime;
+String debugstring = "S";
 static int GROUNDSUPPORT = 0x7; //ground support boards address
 unsigned long looptime; 
 static int MY_I2C_ADDRESS = 0xA;  //my address  0x14
@@ -63,7 +62,7 @@ ISR(WDT_vect) {
 
 void setup_watchdog(int ii) {
   //****************************************************************
-  // 0=16ms, 1=32ms,2=64ms,3=128ms,4=250ms,5=500ms
+  //  0=16ms, 1=32ms,2=64ms,3=128ms,4=250ms,5=500ms &&& don't use these
   // 6=1 sec,7=2 sec, 8=4 sec, 9= 8sec
 
   byte bb;
@@ -73,7 +72,7 @@ void setup_watchdog(int ii) {
   if (ii > 7) bb|= (1<<5);
   bb|= (1<<WDCE);
   ww=bb;
-  Serial.println(ww);
+  debugln(String(ww));
   MCUSR &= ~(1<<WDRF);
   // start timed sequence
   WDTCSR |= (1<<WDCE) | (1<<WDE);
@@ -102,8 +101,8 @@ void receiveEvent(int howMany)
 
   if (1 == DEBUG)
   {
-    Serial.print( "i2cr ");
-    Serial.println(isb_command);
+    debug( "i2cr ");
+    debugln(String(isb_command));
   }
   switch (isb_command) 
   { //toggle debuging mostly enable it
@@ -112,16 +111,15 @@ void receiveEvent(int howMany)
     { 
       if (1 == DEBUG) 
       {
-        Serial.println("debug off");
+        debugln("debug off");
         DEBUG = 0;
       }
       else
       {
         if (0 == DEBUG)
         {
-          debugsetup();
           DEBUG = 1;
-          Serial.println("debug on");
+          debugln("debug on");
         }
       }
       break;
@@ -130,7 +128,7 @@ void receiveEvent(int howMany)
     { //record camera for 5 min
       if (1 == DEBUG)
       {
-        Serial.println("CMD CAMERA 5 Min Record");
+        debugln("CMD CAMERA 5 Min Record");
       }
       autoCamTimer= millis()+300000;
       recording=2;
@@ -142,7 +140,7 @@ void receiveEvent(int howMany)
     { //start camera record on command
       if (1 == DEBUG)
       {
-        Serial.println("CMD CAMERA ON");
+        debugln("CMD CAMERA ON");
       }
       CamState=10;
       recording=1;
@@ -153,7 +151,7 @@ void receiveEvent(int howMany)
     {  //stop camera on command
       if (1 == DEBUG)
       {
-        Serial.println("CMD CAMERA OFF");
+        debugln("CMD CAMERA OFF");
       }
       CamState=0;
       break;
@@ -168,8 +166,8 @@ void requestEvent()
   byte reply_data[2];
   if (1 == DEBUG)
   {
-    Serial.print("itc ");
-    Serial.println(isb_command);
+    debug("itc ");
+    debugln(String(isb_command));
   }
 
   switch (isb_command) 
@@ -181,8 +179,8 @@ void requestEvent()
       Wire.write(reply_data,2);
       if (1 == DEBUG)
       {
-        Serial.print("H ");
-        Serial.println(freshhumid);
+        debug("H ");
+        debugln(String(freshhumid));
       }
       break;
     }  //end humidty case
@@ -194,8 +192,8 @@ void requestEvent()
       Wire.write(reply_data,2);
       if (1 == DEBUG)
       {
-        Serial.print("x ");
-        Serial.println(freshtemp);
+        debug("x ");
+        debugln(String(freshtemp));
       }
       break;
     }//end xbee temp sensor case
@@ -207,8 +205,8 @@ void requestEvent()
       Wire.write(reply_data,2);
       if (1 == DEBUG)
       {
-        Serial.print("c ");
-        Serial.println(freshcloud);
+        debug("c ");
+        debugln(String(freshcloud));
       }
       break;
     }//end particulate sensor case
@@ -216,7 +214,7 @@ void requestEvent()
   default :
     if (1 == DEBUG)
     {
-      Serial.println("fail");
+      debugln("fail");
     }
     reply_data[0] = (byte)255;
     reply_data[1] = (byte)255;
@@ -226,16 +224,41 @@ void requestEvent()
   }//end switch isb_command
 } //end requestEvent()
 
+void debug(String outputstring)
+{	/* mimics like serial.print takes the 
+	input and adds it to the line
+	 max line 30 chars everything else 
+	gets chopped off before sending */
+\
 
-void debuggy(char outputstring)
-{
-  while (millis() < debugtime ){
-  }
-  Wire.beginTransmission(GROUNDSUPPORT);
-  Wire.write(outputstring);
-  Wire.endTransmission();	  
-  debugtime = millis()+100;
+	debugstring+=outputstring; 
+	if (30 <= debugstring.length()) 
+	{
+	debugln("");
+	}
+
 }
+
+void debugln(String outputstring)
+{ 
+	/* mimics serial.println takes the 
+	input and adds it to the line
+	 then sends the data over i2c. 
+	 max line 30 chars everything else 
+	gets chopped off before sending */
+	char senddebug[30];
+	debugstring+=outputstring;
+	debugstring.toCharArray(senddebug,30);
+  	while (millis() < debugtime ){ 
+		//wait before you do this again
+  	}
+  	Wire.beginTransmission(GROUNDSUPPORT);
+  	Wire.write(senddebug);
+  	Wire.endTransmission();	  
+  	debugtime = millis()+100;
+	debugstring="S";
+}
+
 
 /* ---------- Sensor stuff -------------- */
 
@@ -248,8 +271,6 @@ void init_cloud_sensor(void)
 
 int watch_cloud_sensor(int num_rdgs_in_ct)
 {
-
-  int val;
   /* enforce 10 ms delay between pulses, but only delay if needed */
   while (micros() < sched_microsec)  /* wait until next pulse scheduled */
   {
@@ -277,10 +298,10 @@ int watch_cloud_sensor(int num_rdgs_in_ct)
   digitalWrite(cloud_LEDPIN,HIGH); /* turn the LED off */
   if (1 == DEBUG)
   {
-    Serial.print("cr ");
-    Serial.print(runct);
-    Serial.print(" ");
-    Serial.println(data);
+    debug("cr ");
+    debug(String(runct));
+    debug(" ");
+    debugln(String(data));
   }
   runsum += data;
 
@@ -311,8 +332,8 @@ int read_cloud_sensor(void)
 
   if (1 == DEBUG)
   {
-    Serial.print("c ");
-    Serial.println(cloud_sum);
+    debug("c ");
+    debugln(String(cloud_sum));
   }
   return (cloud_sum);
 }
@@ -331,17 +352,17 @@ int read_humid_sensor(void)
     newdelay(10);
     if (1 == DEBUG)
     {
-      Serial.print("hr ");
-      Serial.print(hi);
-      Serial.print(" ");
-      Serial.println(data);
+      debug("hr ");
+      debug(String(hi));
+      debug(" ");
+      debugln(String(data));
     }
   } 
   int RelHum = htotal/10;
   if (1 == DEBUG)
   {
-    Serial.print("hd ");
-    Serial.println(RelHum);
+    debug("hd ");
+    debugln(String(RelHum));
   }
   return (RelHum);
 }
@@ -365,20 +386,19 @@ int read_temp()
 
       if (1 == DEBUG)
       {
-        Serial.print("I/O: ");
-        Serial.print(ioSample.getRemoteAddress64().getMsb(), HEX);  
-        Serial.print(ioSample.getRemoteAddress64().getLsb(), HEX);  
-        Serial.println("");
+        debug("I/O: ");
+        debug(String(ioSample.getRemoteAddress64().getMsb(), HEX));  
+        debugln(String(ioSample.getRemoteAddress64().getLsb(), HEX));  
 
         if (ioSample.containsAnalog()) {
-          Serial.println("a");
+          debugln("a");
           // read analog inputs
           for (int i = 0; i <= 4; i++) {
             if (ioSample.isAnalogEnabled(i)) {
-              Serial.print("A (AI");
-              Serial.print(i, DEC);
-              Serial.print(") is ");
-              Serial.println(ioSample.getAnalog(i), DEC);
+              debug("A (AI");
+              debug(String(i, DEC));
+              debug(") is ");
+              debugln(String(ioSample.getAnalog(i), DEC));
             }
           }
         }
@@ -396,10 +416,10 @@ int read_temp()
 
       if (1 == DEBUG)
       { 
-        Serial.print(" ui0 : ");
-        Serial.println (uiAvalue0);
-        Serial.print(" ui1 : ");
-        Serial.println (uiAvalue1);
+        debug(" ui0 : ");
+        debugln(String(uiAvalue0));
+        debug(" ui1 : ");
+        debugln(String(uiAvalue1));
       }
 
 
@@ -407,15 +427,15 @@ int read_temp()
     else {
       if (1 == DEBUG)
       {
-        Serial.print("ER: ");
-        Serial.println(xbee.getResponse().getApiId(), HEX);
+        debug("ER: ");
+        debugln(String(xbee.getResponse().getApiId(), HEX));
       }
     }    
   } 
   else if (xbee.getResponse().isError()) {
     if (1 == DEBUG)
     {
-      Serial.println("XError. ");  
+      debugln("XError. ");  
     }
   }
 
@@ -430,16 +450,16 @@ int read_temp()
   }
   if (1 == DEBUG)
   {
-    Serial.print("TEC: ");
-    Serial.println(errorcount);
-    Serial.print("TSD: ");
-    Serial.println(realtemp);
+    debug("TEC: ");
+    debugln(String(errorcount));
+    debug("TSD: ");
+    debugln(String(realtemp));
   }
   if( 10 == errorcount)
   {
     if (1 == DEBUG)
     {
-      Serial.println("10 errors");
+      debugln("10 errors");
 
     }
     digitalWrite(xbeereset,HIGH);
@@ -458,7 +478,6 @@ int eval_therm(unsigned int tval, unsigned int vval)
    battery, so the 10-bit integer analog readouts work 
    regardless of A-D range (Arduino 5V, XBee 1.8V)   
    */
-  int deg_c;
   double rtherm;
   double temp;
   double log_r;
@@ -484,14 +503,15 @@ int eval_therm(unsigned int tval, unsigned int vval)
     return 127;  /* error */
   } 
 
+  // no double to string
   if (1 == DEBUG)
   {
-    Serial.print("RDG T: ");
-    Serial.print(tval);
-    Serial.print(" RDG V: ");
-    Serial.print(vval);
-    Serial.print(" Deg C: ");
-    Serial.println(temp);
+    debug("RDG T: ");
+    debug(String((int)(tval)));
+    debug(" RDG V: ");
+    debug(String((int)(vval)));
+    debug(" Deg C: ");
+    debugln(String((int)(temp)));
   }
   return (int)(temp);
 }
@@ -575,16 +595,11 @@ void CameraState()
 
 /* ---------- main body of program -------------- */
 
-void debugsetup()
-{
-  Serial.begin(9600);
-  Serial.println("Controller Started");
-  Serial.println("XBee Started");
-}
 
 void setup()
 {
-
+  debugln("Controller Started");
+  debugln("XBee Started");
   init_cloud_sensor();
   //Initially join the bus as slave device with address 0xA sensor board
   Wire.begin(MY_I2C_ADDRESS);
@@ -625,39 +640,38 @@ void loop()
     if (1 == DEBUG)
     {
 
-      Serial.println("");
-      Serial.println("**");
+      debugln("");
+      debugln("**");
       byte sample_data[2];
-      int sample;
 
-      Serial.print("CS: ");
-      Serial.println(freshcloud);
+      debug("CS: ");
+      debugln(String(freshcloud));
       sample_data[0] = (byte) (freshcloud / 256);
       sample_data[1] = (byte) (freshcloud % 256);
-      Serial.print("CS: "); 
-      Serial.print((int)sample_data[0]); 
-      Serial.print(" and "); 
-      Serial.println((int)sample_data[1]); 
+      debug("CS: "); 
+      debug(String((int)sample_data[0])); 
+      debug(" and "); 
+      debugln(String((int)sample_data[1])); 
       newdelay(1);
 
-      Serial.print("H: ");
-      Serial.println(freshhumid);
+      debug("H: ");
+      debugln(String(freshhumid));
       sample_data[0] = (byte) (freshhumid / 256);
       sample_data[1] = (byte) (freshhumid % 256);
-      Serial.print("HS: "); 
-      Serial.print((int)sample_data[0]); 
-      Serial.print(" and "); 
-      Serial.println((int)sample_data[1]); 
+      debug("HS: "); 
+      debug(String((int)sample_data[0])); 
+      debug(" and "); 
+      debugln(String((int)sample_data[1])); 
       newdelay(1);
 
-      Serial.print("T: ");
-      Serial.println(freshtemp);
+      debug("T: ");
+      debugln(String(freshtemp));
       sample_data[0] = (byte) (freshtemp / 256);
       sample_data[1] = (byte) (freshtemp % 256);
-      Serial.print("TS: "); 
-      Serial.print((int)sample_data[0]); 
-      Serial.print(" and "); 
-      Serial.println((int)sample_data[1]); 
+      debug("TS: "); 
+      debug(String((int)sample_data[0])); 
+      debug(" and "); 
+      debugln(String((int)sample_data[1])); 
       newdelay(1);
     }
   }
