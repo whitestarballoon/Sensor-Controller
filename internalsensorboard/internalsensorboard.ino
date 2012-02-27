@@ -30,6 +30,7 @@ static int errorcount;
 static uint16_t freshcloud;
 static uint16_t freshtemp;
 static uint16_t freshhumid;
+boolean debugready=0;
 volatile boolean f_wdt=1; //watchdog global flag
 int CamState = 0;
 unsigned long CamTimer;
@@ -72,7 +73,7 @@ void setup_watchdog(int ii) {
   if (ii > 7) bb|= (1<<5);
   bb|= (1<<WDCE);
   ww=bb;
-  debugln(String(ww));
+  debug(String(ww));
   MCUSR &= ~(1<<WDRF);
   // start timed sequence
   WDTCSR |= (1<<WDCE) | (1<<WDE);
@@ -102,7 +103,7 @@ void receiveEvent(int howMany)
   if (1 == DEBUG)
   {
     debug( "i2cr ");
-    debugln(String(isb_command));
+    debug(String(isb_command));
   }
   switch (isb_command) 
   { //toggle debuging mostly enable it
@@ -111,7 +112,7 @@ void receiveEvent(int howMany)
     { 
       if (1 == DEBUG) 
       {
-        debugln("debug off");
+        debug("debug off");
         DEBUG = 0;
       }
       else
@@ -119,7 +120,7 @@ void receiveEvent(int howMany)
         if (0 == DEBUG)
         {
           DEBUG = 1;
-          debugln("debug on");
+          debug("debug on");
         }
       }
       break;
@@ -128,7 +129,7 @@ void receiveEvent(int howMany)
     { //record camera for 5 min
       if (1 == DEBUG)
       {
-        debugln("CMD CAMERA 5 Min Record");
+        debug("CMD CAMERA 5 Min Record");
       }
       autoCamTimer= millis()+300000;
       recording=2;
@@ -140,7 +141,7 @@ void receiveEvent(int howMany)
     { //start camera record on command
       if (1 == DEBUG)
       {
-        debugln("CMD CAMERA ON");
+        debug("CMD CAMERA ON");
       }
       CamState=10;
       recording=1;
@@ -151,7 +152,7 @@ void receiveEvent(int howMany)
     {  //stop camera on command
       if (1 == DEBUG)
       {
-        debugln("CMD CAMERA OFF");
+        debug("CMD CAMERA OFF");
       }
       CamState=0;
       break;
@@ -167,7 +168,7 @@ void requestEvent()
   if (1 == DEBUG)
   {
     debug("itc ");
-    debugln(String(isb_command));
+    debug(String(isb_command));
   }
 
   switch (isb_command) 
@@ -180,7 +181,7 @@ void requestEvent()
       if (1 == DEBUG)
       {
         debug("H ");
-        debugln(String(freshhumid));
+        debug(String(freshhumid));
       }
       break;
     }  //end humidty case
@@ -193,7 +194,7 @@ void requestEvent()
       if (1 == DEBUG)
       {
         debug("x ");
-        debugln(String(freshtemp));
+        debug(String(freshtemp));
       }
       break;
     }//end xbee temp sensor case
@@ -206,7 +207,7 @@ void requestEvent()
       if (1 == DEBUG)
       {
         debug("c ");
-        debugln(String(freshcloud));
+        debug(String(freshcloud));
       }
       break;
     }//end particulate sensor case
@@ -214,7 +215,7 @@ void requestEvent()
   default :
     if (1 == DEBUG)
     {
-      debugln("fail");
+      debug("fail");
     }
     reply_data[0] = (byte)255;
     reply_data[1] = (byte)255;
@@ -225,38 +226,36 @@ void requestEvent()
 } //end requestEvent()
 
 void debug(String outputstring)
-{	/* mimics like serial.print takes the 
-	input and adds it to the line
-	 max line 30 chars everything else 
-	gets chopped off before sending */
-\
-
-	debugstring+=outputstring; 
-	if (30 <= debugstring.length()) 
-	{
-	debugln("");
-	}
+{ 	/* mimics like serial.print takes the 
+ 	input and adds it to the line
+ 	 max line 30 chars everything else 
+ 	gets chopped off before sending */
+  debugready=1;
+  debugstring+=outputstring; 
 
 }
 
-void debugln(String outputstring)
+void debugln()
 { 
-	/* mimics serial.println takes the 
-	input and adds it to the line
-	 then sends the data over i2c. 
-	 max line 30 chars everything else 
-	gets chopped off before sending */
-	char senddebug[30];
-	debugstring+=outputstring;
-	debugstring.toCharArray(senddebug,30);
-  	while (millis() < debugtime ){ 
-		//wait before you do this again
-  	}
-  	Wire.beginTransmission(GROUNDSUPPORT);
-  	Wire.write(senddebug);
-  	Wire.endTransmission();	  
-  	debugtime = millis()+100;
-	debugstring="S";
+  /* mimics serial.println takes the 
+   	input and adds it to the line
+   	 then sends the data over i2c. 
+   	 max line 50 chars everything else 
+   	gets chopped off before sending */
+  if (1 == debugready)	
+  {
+    char senddebug[50];
+    debugstring.toCharArray(senddebug,50);
+    while (millis() < debugtime ){ 
+      //wait before you do this again
+    }
+    Wire.beginTransmission(GROUNDSUPPORT);
+    Wire.write(senddebug);
+    Wire.endTransmission();	  
+    debugtime = millis()+100;
+    debugstring="S";
+    debugready=0;
+  }
 }
 
 
@@ -301,7 +300,7 @@ int watch_cloud_sensor(int num_rdgs_in_ct)
     debug("cr ");
     debug(String(runct));
     debug(" ");
-    debugln(String(data));
+    debug(String(data));
   }
   runsum += data;
 
@@ -333,7 +332,7 @@ int read_cloud_sensor(void)
   if (1 == DEBUG)
   {
     debug("c ");
-    debugln(String(cloud_sum));
+    debug(String(cloud_sum));
   }
   return (cloud_sum);
 }
@@ -355,14 +354,14 @@ int read_humid_sensor(void)
       debug("hr ");
       debug(String(hi));
       debug(" ");
-      debugln(String(data));
+      debug(String(data));
     }
   } 
   int RelHum = htotal/10;
   if (1 == DEBUG)
   {
     debug("hd ");
-    debugln(String(RelHum));
+    debug(String(RelHum));
   }
   return (RelHum);
 }
@@ -388,17 +387,17 @@ int read_temp()
       {
         debug("I/O: ");
         debug(String(ioSample.getRemoteAddress64().getMsb(), HEX));  
-        debugln(String(ioSample.getRemoteAddress64().getLsb(), HEX));  
+        debug(String(ioSample.getRemoteAddress64().getLsb(), HEX));  
 
         if (ioSample.containsAnalog()) {
-          debugln("a");
+          debug("a");
           // read analog inputs
           for (int i = 0; i <= 4; i++) {
             if (ioSample.isAnalogEnabled(i)) {
               debug("A (AI");
               debug(String(i, DEC));
               debug(") is ");
-              debugln(String(ioSample.getAnalog(i), DEC));
+              debug(String(ioSample.getAnalog(i), DEC));
             }
           }
         }
@@ -417,9 +416,9 @@ int read_temp()
       if (1 == DEBUG)
       { 
         debug(" ui0 : ");
-        debugln(String(uiAvalue0));
+        debug(String(uiAvalue0));
         debug(" ui1 : ");
-        debugln(String(uiAvalue1));
+        debug(String(uiAvalue1));
       }
 
 
@@ -428,14 +427,14 @@ int read_temp()
       if (1 == DEBUG)
       {
         debug("ER: ");
-        debugln(String(xbee.getResponse().getApiId(), HEX));
+        debug(String(xbee.getResponse().getApiId(), HEX));
       }
     }    
   } 
   else if (xbee.getResponse().isError()) {
     if (1 == DEBUG)
     {
-      debugln("XError. ");  
+      debug("XError. ");  
     }
   }
 
@@ -451,15 +450,15 @@ int read_temp()
   if (1 == DEBUG)
   {
     debug("TEC: ");
-    debugln(String(errorcount));
+    debug(String(errorcount));
     debug("TSD: ");
-    debugln(String(realtemp));
+    debug(String(realtemp));
   }
   if( 10 == errorcount)
   {
     if (1 == DEBUG)
     {
-      debugln("10 errors");
+      debug("10 errors");
 
     }
     digitalWrite(xbeereset,HIGH);
@@ -511,7 +510,7 @@ int eval_therm(unsigned int tval, unsigned int vval)
     debug(" RDG V: ");
     debug(String((int)(vval)));
     debug(" Deg C: ");
-    debugln(String((int)(temp)));
+    debug(String((int)(temp)));
   }
   return (int)(temp);
 }
@@ -598,8 +597,8 @@ void CameraState()
 
 void setup()
 {
-  debugln("Controller Started");
-  debugln("XBee Started");
+  debug("Controller Started");
+  debug("XBee Started");
   init_cloud_sensor();
   //Initially join the bus as slave device with address 0xA sensor board
   Wire.begin(MY_I2C_ADDRESS);
@@ -617,6 +616,7 @@ void setup()
 } //end setup()
 
 
+
 void loop()
 {
 #ifdef WATCHDOGENABLE 
@@ -624,7 +624,7 @@ void loop()
     f_wdt=0;       // reset flag
   }
 #endif
-
+  debugln();
   CameraState();
   while (millis() >= looptime)
   {
@@ -640,45 +640,40 @@ void loop()
     if (1 == DEBUG)
     {
 
-      debugln("");
-      debugln("**");
+      debug("");
+      debug("**");
       byte sample_data[2];
 
       debug("CS: ");
-      debugln(String(freshcloud));
+      debug(String(freshcloud));
       sample_data[0] = (byte) (freshcloud / 256);
       sample_data[1] = (byte) (freshcloud % 256);
       debug("CS: "); 
       debug(String((int)sample_data[0])); 
       debug(" and "); 
-      debugln(String((int)sample_data[1])); 
+      debug(String((int)sample_data[1])); 
       newdelay(1);
 
       debug("H: ");
-      debugln(String(freshhumid));
+      debug(String(freshhumid));
       sample_data[0] = (byte) (freshhumid / 256);
       sample_data[1] = (byte) (freshhumid % 256);
       debug("HS: "); 
       debug(String((int)sample_data[0])); 
       debug(" and "); 
-      debugln(String((int)sample_data[1])); 
+      debug(String((int)sample_data[1])); 
       newdelay(1);
 
       debug("T: ");
-      debugln(String(freshtemp));
+      debug(String(freshtemp));
       sample_data[0] = (byte) (freshtemp / 256);
       sample_data[1] = (byte) (freshtemp % 256);
       debug("TS: "); 
       debug(String((int)sample_data[0])); 
       debug(" and "); 
-      debugln(String((int)sample_data[1])); 
+      debug(String((int)sample_data[1])); 
       newdelay(1);
     }
   }
 }//end loop()
-
-
-
-
-
 
