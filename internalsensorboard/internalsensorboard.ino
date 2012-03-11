@@ -170,7 +170,6 @@ void requestEvent()
     debug("itc ");
     debug(String(isb_command));
   }
-
   switch (isb_command) 
   { //toggle debuging mostly enable it
   case 0x4:
@@ -180,8 +179,12 @@ void requestEvent()
       Wire.write(reply_data,2);
       if (1 == DEBUG)
       {
-        debug("H ");
+        debug("H: ");
         debug(String(freshhumid));
+        debug("HS: "); 
+        debug(String((int)reply_data[0])); 
+        debug(" and "); 
+        debug(String((int)reply_data[1])); 
       }
       break;
     }  //end humidty case
@@ -193,8 +196,12 @@ void requestEvent()
       Wire.write(reply_data,2);
       if (1 == DEBUG)
       {
-        debug("x ");
+        debug("T: ");
         debug(String(freshtemp));
+        debug("TS: "); 
+        debug(String((int)reply_data[0])); 
+        debug(" and "); 
+        debug(String((int)reply_data[1])); 
       }
       break;
     }//end xbee temp sensor case
@@ -206,8 +213,10 @@ void requestEvent()
       Wire.write(reply_data,2);
       if (1 == DEBUG)
       {
-        debug("c ");
-        debug(String(freshcloud));
+        debug("CS: "); 
+        debug(String((int)reply_data[0])); 
+        debug(" and "); 
+        debug(String((int)reply_data[1])); 
       }
       break;
     }//end particulate sensor case
@@ -237,11 +246,6 @@ void debug(String outputstring)
 
 void debugln()
 { 
-  /* mimics serial.println takes the 
-   	input and adds it to the line
-   	 then sends the data over i2c. 
-   	 max line 50 chars everything else 
-   	gets chopped off before sending */
   if (1 == debugready)	
   {
     char senddebug[50];
@@ -252,7 +256,7 @@ void debugln()
     Wire.beginTransmission(GROUNDSUPPORT);
     Wire.write(senddebug);
     Wire.endTransmission();	  
-    debugtime = millis()+100;
+    debugtime = millis()+200;
     debugstring="S";
     debugready=0;
   }
@@ -512,6 +516,8 @@ int eval_therm(unsigned int tval, unsigned int vval)
     debug(" Deg C: ");
     debug(String((int)(temp)));
   }
+  
+  
   return (int)(temp);
 }
 
@@ -613,6 +619,7 @@ void setup()
 #ifdef WATCHDOGENABLE 
   setup_watchdog(9);
 #endif
+  debugln();
 } //end setup()
 
 
@@ -636,44 +643,6 @@ void loop()
     newdelay(10);
     looptime = millis()+30000;
 
-
-    if (1 == DEBUG)
-    {
-
-      debug("");
-      debug("**");
-      byte sample_data[2];
-
-      debug("CS: ");
-      debug(String(freshcloud));
-      sample_data[0] = (byte) (freshcloud / 256);
-      sample_data[1] = (byte) (freshcloud % 256);
-      debug("CS: "); 
-      debug(String((int)sample_data[0])); 
-      debug(" and "); 
-      debug(String((int)sample_data[1])); 
-      newdelay(1);
-
-      debug("H: ");
-      debug(String(freshhumid));
-      sample_data[0] = (byte) (freshhumid / 256);
-      sample_data[1] = (byte) (freshhumid % 256);
-      debug("HS: "); 
-      debug(String((int)sample_data[0])); 
-      debug(" and "); 
-      debug(String((int)sample_data[1])); 
-      newdelay(1);
-
-      debug("T: ");
-      debug(String(freshtemp));
-      sample_data[0] = (byte) (freshtemp / 256);
-      sample_data[1] = (byte) (freshtemp % 256);
-      debug("TS: "); 
-      debug(String((int)sample_data[0])); 
-      debug(" and "); 
-      debug(String((int)sample_data[1])); 
-      newdelay(1);
-    }
   }
 }//end loop()
 
