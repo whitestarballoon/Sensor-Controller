@@ -605,8 +605,7 @@ void CameraState()
 
 void setup()
 {
-  debug("Controller Started");
-  debug("XBee Started");
+  debug("Sensor Controller Started");
   init_cloud_sensor();
   //Initially join the bus as slave device with address 0xA sensor board
   Wire.begin(MY_I2C_ADDRESS);
@@ -617,6 +616,7 @@ void setup()
   CameraSetup();
   errorcount = 0;
   xbee.begin(9600);
+  debug("XBee Started");
   looptime = 0; 
 #ifdef WATCHDOGENABLE 
   setup_watchdog(9);
