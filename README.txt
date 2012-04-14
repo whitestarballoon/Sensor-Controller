@@ -1,3 +1,10 @@
+﻿***Updates and Useful Things***
+
+Added new XBee compared to master - this is compatable with android 1.0 due to the WProgram rename to Arduino.h .
+
+Assumed the humidity sensor is Honeywell HIH-4030, http://www.pololu.com/file/download/HIH-4030-datasheet.pdf?file_id=0J324, Available from sparkfun.
+
+
 White Star Internal Sensor Controller Arduino Project
 
 Purpose:
