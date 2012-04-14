@@ -1,3 +1,6 @@
+// Requires XBee Library version number ??
+
+
 boolean DEBUG = 1;// 1 enable 0 disable
 #define WATCHDOGENABLE
 #include <avr/wdt.h>
@@ -92,7 +95,7 @@ void newdelay(int time)
   }
 }
 
-/* ------- I2C stuff that needs to be done  ------- */
+/* ------- I2C Parsing  ------- */
 void receiveEvent(int howMany)
 {
   while (Wire.available() > 0)
@@ -264,7 +267,7 @@ void debugln()
 
 
 /* ---------- Sensor stuff -------------- */
-
+// ------ Cloud Sensor -------
 void init_cloud_sensor(void)
 {
   pinMode(cloud_LEDPIN,OUTPUT);
@@ -341,7 +344,7 @@ int read_cloud_sensor(void)
   return (cloud_sum);
 }
 
-
+// ------ Humidity Sensor -------
 
 int read_humid_sensor(void)
 { //get the humidity
@@ -370,7 +373,7 @@ int read_humid_sensor(void)
   return (RelHum);
 }
 
-
+// ------ XBee remote analog temperature Sensor -------
 
 int read_temp()
 {
