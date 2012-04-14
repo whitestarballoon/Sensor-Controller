@@ -529,9 +529,8 @@ int eval_therm(unsigned int tval, unsigned int vval)
 void CameraSetup()
 {
   // initialize pins for high impedence
-  pinMode(CAMSWITCH,OUTPUT);
-  digitalWrite(CAMSWITCH,HIGH);
   pinMode(CAMSWITCH,INPUT);
+  digitalWrite(CAMSWITCH,HIGH);
 }
 
 
