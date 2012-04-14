@@ -57,12 +57,15 @@ FIO with Series 2 (ZigBee) XBee Radios only
 XBee xbee = XBee();
 ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
 
+/* Commented, investigating usign wdt)_enable();
 ISR(WDT_vect) {
   //****************************************************************  
   // Watchdog Interrupt Service is executed when watchdog times out 
   // without this the thing will just reset the program like a big jerk
   f_wdt=1;  // set global flag
 }
+
+
 
 void setup_watchdog(int ii) {
   //****************************************************************
@@ -84,7 +87,7 @@ void setup_watchdog(int ii) {
   WDTCSR = bb;
   WDTCSR |= _BV(WDIE);
 
-}
+}*/
 
 
 void newdelay(int time)
@@ -619,7 +622,11 @@ void setup()
   debug("XBee Started");
   looptime = 0; 
 #ifdef WATCHDOGENABLE 
-  setup_watchdog(9);
+ /* replaced with wdt_enable();
+ setup_watchdog(9); 
+ */
+ //wdt_enable(9); sets for 8S watchdog.
+ wdt_enable(9);
 #endif
   debugln();
 } //end setup()
@@ -629,10 +636,14 @@ void setup()
 void loop()
 {
 #ifdef WATCHDOGENABLE 
+  /* Replaced with wdt_reset();
   if (f_wdt==1) {  // wait for timed out watchdog / flag is set when a watchdog timeout occurs
     f_wdt=0;       // reset flag
-  }
+  } */
+  //reset watchdog each run.
+  wdt_reset();
 #endif
+
   debugln();
   CameraState();
   while (millis() >= looptime)
