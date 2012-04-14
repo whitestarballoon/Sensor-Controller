@@ -335,8 +335,8 @@ int read_humid_sensor(int temp)
     }
   } 
   //integer, quantised value
-  int qval = htotal/10;
-  //float, calculates voltage input based on full scale sensitivity
+  int qval = htotal/10; 
+  //float, calculates sensor voltage based on full scale ADC sensitivity
   float Vs = (qval*0.00322265625);
   //RHs is the sensor relative humidity, calculated using Vs
   float RHs = ((Vs-0.528)/0.02046);
