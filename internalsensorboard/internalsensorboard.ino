@@ -33,6 +33,7 @@ static int errorcount;
 static uint16_t freshcloud;
 static uint16_t freshtemp;
 static uint16_t freshhumid;
+static uint16_t externalTemp = 30; //set to room temp for testing REMOVE BEFORE FLIGHT
 boolean debugready=0;
 volatile boolean f_wdt=1; //watchdog global flag
 int CamState = 0;
@@ -620,7 +621,7 @@ void loop()
     newdelay(10);
     freshtemp = read_temp();
     newdelay(10);
-    freshhumid = read_humid_sensor(freshtemp);
+    freshhumid = read_humid_sensor(externalTemp);
     newdelay(10);
     looptime = millis()+30000;
 
