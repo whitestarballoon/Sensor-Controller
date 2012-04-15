@@ -57,36 +57,6 @@ FIO with Series 2 (ZigBee) XBee Radios only
 XBee xbee = XBee();
 ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
 
-ISR(WDT_vect) {
-  //****************************************************************  
-  // Watchdog Interrupt Service is executed when watchdog times out 
-  // without this the thing will just reset the program like a big jerk
-  f_wdt=1;  // set global flag
-}
-
-void setup_watchdog(int ii) {
-  //****************************************************************
-  //  0=16ms, 1=32ms,2=64ms,3=128ms,4=250ms,5=500ms &&& don't use these
-  // 6=1 sec,7=2 sec, 8=4 sec, 9= 8sec
-
-  byte bb;
-  int ww;
-  if (ii > 9 ) ii=9;
-  bb=ii & 7;
-  if (ii > 7) bb|= (1<<5);
-  bb|= (1<<WDCE);
-  ww=bb;
-  debug(String(ww));
-  MCUSR &= ~(1<<WDRF);
-  // start timed sequence
-  WDTCSR |= (1<<WDCE) | (1<<WDE);
-  // set new watchdog timeout value
-  WDTCSR = bb;
-  WDTCSR |= _BV(WDIE);
-
-}
-
-
 void newdelay(int time)
 {
   unsigned long start; 
@@ -346,7 +316,7 @@ int read_cloud_sensor(void)
 
 // ------ Humidity Sensor -------
 
-int read_humid_sensor(void)
+int read_humid_sensor(int temp)
 { //get the humidity
   int htotal = 0;
   int data;
@@ -364,7 +334,16 @@ int read_humid_sensor(void)
       debug(String(data));
     }
   } 
-  int RelHum = htotal/10;
+  //integer, quantised value
+  int qval = htotal/10; 
+  //float, calculates sensor voltage based on full scale ADC sensitivity
+  float Vs = (qval*0.00322265625);
+  //RHs is the sensor relative humidity, calculated using Vs
+  float RHs = ((Vs-0.528)/0.02046);
+  //RHt is the true, temperature adjusted relative humidity
+  float RHt  = RHs/(1.0546-0.00216*temp);
+  //cast to int RelHum for output. It will truncate, not round.
+  int  RelHum = (int) RHt;
   if (1 == DEBUG)
   {
     debug("hd ");
@@ -520,7 +499,6 @@ int eval_therm(unsigned int tval, unsigned int vval)
     debug(String((int)(temp)));
   }
   
-  
   return (int)(temp);
 }
 
@@ -619,7 +597,7 @@ void setup()
   debug("XBee Started");
   looptime = 0; 
 #ifdef WATCHDOGENABLE 
-  setup_watchdog(9);
+ wdt_enable(9);
 #endif
   debugln();
 } //end setup()
@@ -629,19 +607,20 @@ void setup()
 void loop()
 {
 #ifdef WATCHDOGENABLE 
-  if (f_wdt==1) {  // wait for timed out watchdog / flag is set when a watchdog timeout occurs
-    f_wdt=0;       // reset flag
-  }
+  //reset watchdog each run.
+  wdt_reset();
 #endif
+
   debugln();
   CameraState();
   while (millis() >= looptime)
   {
+    //reordered so temp comes before humidity for maths purposes
     freshcloud = read_cloud_sensor();
     newdelay(10);
-    freshhumid = read_humid_sensor();
-    newdelay(10);
     freshtemp = read_temp();
+    newdelay(10);
+    freshhumid = read_humid_sensor(freshtemp);
     newdelay(10);
     looptime = millis()+30000;
 
