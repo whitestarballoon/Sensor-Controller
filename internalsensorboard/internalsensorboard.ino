@@ -1,11 +1,17 @@
 // Requires XBee Library version number ??
 
 
-boolean DEBUG = 1;// 1 enable 0 disable
+
+
+boolean DEBUG = 0;// 1 enable 0 disable
+const boolean DEBUGOVERVIEW = 1;
 #define WATCHDOGENABLE
 #include <avr/wdt.h>
+#include <avr/pgmspace.h>
+#include <stdarg.h>
+#include <string.h>
 #include <XBee.h>
-#include <Wire.h>
+#include <WSWire.h>
 /* define/reserve the pins */
 #define cloud_LEDPIN 11    //for cloud sensor detector
 #define SDAL_PIN 4  //whitestar I2C bus data line
@@ -14,13 +20,18 @@ boolean DEBUG = 1;// 1 enable 0 disable
 #define HUMID_ANALOGPIN 7     //for humidity sensors output
 #define cloud_ANALOGPIN 6    //for cloud sensors output
 
+// Workaround for http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34734
+#undef PROGMEM
+#define PROGMEM __attribute__((section(".progmem.data")))
+
 /* Camera PINS  */
 #define CAMSWITCH 7 //  camera control pin
+const int MY_I2C_ADDRESS = 0xA;  //my address  0x14
+const int GROUNDSUPPORT = 0x7; //ground support boards address
 unsigned long debugtime;
-String debugstring = "S";
-static int GROUNDSUPPORT = 0x7; //ground support boards address
+
 unsigned long looptime; 
-static int MY_I2C_ADDRESS = 0xA;  //my address  0x14
+
 int isb_command;  // command given by da boss
 /* ----- Variables support polling SHARP GP2Y1010AU0F dust sensor --- */
 #define TOOBIG_ULONG 0xFFFFD8F0  /* constant is the unsigned long limit - 10000 */
@@ -45,7 +56,7 @@ unsigned int wakecnt; //counts the number of times the system has gone through g
 FIO with Series 2 (ZigBee) XBee Radios only
  Receives I/O samples from a remote radio.
  The remote radio must have IR > 0 and at least one digital or analog input enabled.
- The XBee *** coordinator *** should be connected to the Arduino.
+ The XBee *** coordinator *** should be connected to this Arduino.
  */
 // empirical calibration of thermistor curve -- log(R) vs. deg C
 #define COEFF_XSQ   1.173974
@@ -57,6 +68,8 @@ FIO with Series 2 (ZigBee) XBee Radios only
 
 XBee xbee = XBee();
 ZBRxIoSampleResponse ioSample = ZBRxIoSampleResponse();
+
+void debug(char *str, ...);
 
 void newdelay(int time)
 {
@@ -76,8 +89,7 @@ void receiveEvent(int howMany)
 
   if (1 == DEBUG)
   {
-    debug( "i2cr ");
-    debug(String(isb_command));
+    debug(PSTR("i2crx: %d"),isb_command);
   }
   switch (isb_command) 
   { //toggle debuging mostly enable it
@@ -86,7 +98,7 @@ void receiveEvent(int howMany)
     { 
       if (1 == DEBUG) 
       {
-        debug("debug off");
+        debug(PSTR("debug off"));
         DEBUG = 0;
       }
       else
@@ -94,7 +106,7 @@ void receiveEvent(int howMany)
         if (0 == DEBUG)
         {
           DEBUG = 1;
-          debug("debug on");
+          debug(PSTR("debug on"));
         }
       }
       break;
@@ -103,7 +115,7 @@ void receiveEvent(int howMany)
     { //record camera for 5 min
       if (1 == DEBUG)
       {
-        debug("CMD CAMERA 5 Min Record");
+        debug(PSTR("CMD:CAM5"));
       }
       autoCamTimer= millis()+300000;
       recording=2;
@@ -115,7 +127,7 @@ void receiveEvent(int howMany)
     { //start camera record on command
       if (1 == DEBUG)
       {
-        debug("CMD CAMERA ON");
+        debug(PSTR("CMD:CAM ON"));
       }
       CamState=10;
       recording=1;
@@ -126,7 +138,7 @@ void receiveEvent(int howMany)
     {  //stop camera on command
       if (1 == DEBUG)
       {
-        debug("CMD CAMERA OFF");
+        debug(PSTR("CMD:CAM OFF"));
       }
       CamState=0;
       break;
@@ -139,10 +151,9 @@ void receiveEvent(int howMany)
 void requestEvent()
 {    
   byte reply_data[2];
-  if (1 == DEBUG)
+  if (1 == DEBUGOVERVIEW)
   {
-    debug("itc ");
-    debug(String(isb_command));
+    debug(PSTR("i2c requested: %d"),isb_command);
   }
   switch (isb_command) 
   { //toggle debuging mostly enable it
@@ -151,14 +162,9 @@ void requestEvent()
       reply_data[0] = (byte) (freshhumid / 256);
       reply_data[1] = (byte) (freshhumid % 256);
       Wire.write(reply_data,2);
-      if (1 == DEBUG)
+      if (1 == DEBUGOVERVIEW)
       {
-        debug("H: ");
-        debug(String(freshhumid));
-        debug("HS: "); 
-        debug(String((int)reply_data[0])); 
-        debug(" and "); 
-        debug(String((int)reply_data[1])); 
+        debug(PSTR("Sent RelHumid: %d Hex: %x and %x"),freshhumid,(int)reply_data[0],(int)reply_data[1]); 
       }
       break;
     }  //end humidty case
@@ -168,14 +174,9 @@ void requestEvent()
       reply_data[0] = (byte) (freshtemp / 256);
       reply_data[1] = (byte) (freshtemp % 256);
       Wire.write(reply_data,2);
-      if (1 == DEBUG)
+      if (1 == DEBUGOVERVIEW)
       {
-        debug("T: ");
-        debug(String(freshtemp));
-        debug("TS: "); 
-        debug(String((int)reply_data[0])); 
-        debug(" and "); 
-        debug(String((int)reply_data[1])); 
+        debug(PSTR("Sent Temp: %d TS: %d and %d"),freshtemp,(int)reply_data[0],(int)reply_data[1]);
       }
       break;
     }//end xbee temp sensor case
@@ -185,12 +186,9 @@ void requestEvent()
       reply_data[0] = (byte) (freshcloud / 256);
       reply_data[1] = (byte) (freshcloud % 256);
       Wire.write(reply_data,2);
-      if (1 == DEBUG)
+      if (1 == DEBUGOVERVIEW)
       {
-        debug("CS: "); 
-        debug(String((int)reply_data[0])); 
-        debug(" and "); 
-        debug(String((int)reply_data[1])); 
+        debug(PSTR("Sent Cloud: %d and %d"),(int)reply_data[0],(int)reply_data[1]); 
       }
       break;
     }//end particulate sensor case
@@ -198,7 +196,7 @@ void requestEvent()
   default :
     if (1 == DEBUG)
     {
-      debug("fail");
+      debug(PSTR("fail"));
     }
     reply_data[0] = (byte)255;
     reply_data[1] = (byte)255;
@@ -208,32 +206,25 @@ void requestEvent()
   }//end switch isb_command
 } //end requestEvent()
 
-void debug(String outputstring)
-{ 	/* mimics like serial.print takes the 
- 	input and adds it to the line
- 	 max line 30 chars everything else 
- 	gets chopped off before sending */
-  debugready=1;
-  debugstring+=outputstring; 
-
-}
-
-void debugln()
+void debug(char *str, ...)
 { 
-  if (1 == debugready)	
-  {
-    char senddebug[50];
-    debugstring.toCharArray(senddebug,50);
     while (millis() < debugtime ){ 
       //wait before you do this again
     }
+  char lstr[32];
+  int chars;
+  va_list args;
+   va_start(args, str);
+   lstr[0]='S';
+   chars = vsnprintf_P(lstr+1, 31, str, args);
+   if ( chars >= 31 ) lstr[31]=0; 
+   va_end (args);
     Wire.beginTransmission(GROUNDSUPPORT);
-    Wire.write(senddebug);
-    Wire.endTransmission();	  
-    debugtime = millis()+200;
-    debugstring="S";
-    debugready=0;
-  }
+    Wire.write(lstr);
+    Wire.endTransmission();	
+  
+  
+	debugtime = millis()+random(100,300);
 }
 
 
@@ -275,10 +266,7 @@ int watch_cloud_sensor(int num_rdgs_in_ct)
   digitalWrite(cloud_LEDPIN,HIGH); /* turn the LED off */
   if (1 == DEBUG)
   {
-    debug("cr ");
-    debug(String(runct));
-    debug(" ");
-    debug(String(data));
+    debug(PSTR("cr %d %d"),runct,data);
   }
   runsum += data;
 
@@ -309,8 +297,7 @@ int read_cloud_sensor(void)
 
   if (1 == DEBUG)
   {
-    debug("c ");
-    debug(String(cloud_sum));
+    debug(PSTR("c %d"),cloud_sum);
   }
   return (cloud_sum);
 }
@@ -329,10 +316,7 @@ int read_humid_sensor(int temp)
     newdelay(10);
     if (1 == DEBUG)
     {
-      debug("hr ");
-      debug(String(hi));
-      debug(" ");
-      debug(String(data));
+      debug(PSTR("hr %d %d"),hi,data);
     }
   } 
   //integer, quantised value
@@ -347,8 +331,7 @@ int read_humid_sensor(int temp)
   int  RelHum = (int) RHt;
   if (1 == DEBUG)
   {
-    debug("hd ");
-    debug(String(RelHum));
+    debug(PSTR("hd %d"),RelHum);
   }
   return (RelHum);
 }
@@ -372,19 +355,14 @@ int read_temp()
 
       if (1 == DEBUG)
       {
-        debug("I/O: ");
-        debug(String(ioSample.getRemoteAddress64().getMsb(), HEX));  
-        debug(String(ioSample.getRemoteAddress64().getLsb(), HEX));  
+        debug(PSTR("I/O: %x%x"),ioSample.getRemoteAddress64().getMsb(),ioSample.getRemoteAddress64().getLsb());  
 
         if (ioSample.containsAnalog()) {
-          debug("a");
+          debug(PSTR("analog:"));
           // read analog inputs
           for (int i = 0; i <= 4; i++) {
             if (ioSample.isAnalogEnabled(i)) {
-              debug("A (AI");
-              debug(String(i, DEC));
-              debug(") is ");
-              debug(String(ioSample.getAnalog(i), DEC));
+              debug(PSTR("A (AI%d) is %d"),i,ioSample.getAnalog(i));
             }
           }
         }
@@ -402,10 +380,7 @@ int read_temp()
 
       if (1 == DEBUG)
       { 
-        debug(" ui0 : ");
-        debug(String(uiAvalue0));
-        debug(" ui1 : ");
-        debug(String(uiAvalue1));
+        debug(PSTR(" ui0 : %d ui1 : %d"),uiAvalue0,uiAvalue1);
       }
 
 
@@ -413,15 +388,14 @@ int read_temp()
     else {
       if (1 == DEBUG)
       {
-        debug("ER: ");
-        debug(String(xbee.getResponse().getApiId(), HEX));
+        debug(PSTR("XBee ERROR: %x"),xbee.getResponse().getApiId(), HEX);
       }
     }    
   } 
   else if (xbee.getResponse().isError()) {
     if (1 == DEBUG)
     {
-      debug("XError. ");  
+      debug(PSTR("XBee Error. "));  
     }
   }
 
@@ -436,16 +410,14 @@ int read_temp()
   }
   if (1 == DEBUG)
   {
-    debug("TEC: ");
-    debug(String(errorcount));
-    debug("TSD: ");
-    debug(String(realtemp));
+    debug(PSTR("TError Count: %d"),errorcount);
+    debug(PSTR("T Realtemp: %d"),realtemp);
   }
   if( 10 == errorcount)
   {
     if (1 == DEBUG)
     {
-      debug("10 errors");
+      debug(PSTR("10 errors"));
 
     }
     digitalWrite(xbeereset,HIGH);
@@ -492,12 +464,7 @@ int eval_therm(unsigned int tval, unsigned int vval)
   // no double to string
   if (1 == DEBUG)
   {
-    debug("RDG T: ");
-    debug(String((int)(tval)));
-    debug(" RDG V: ");
-    debug(String((int)(vval)));
-    debug(" Deg C: ");
-    debug(String((int)(temp)));
+    debug(PSTR("RDG T: %d RDG V: %d Deg C: %d"),(int)(tval),(int)(vval),(int)(temp));
   }
   
   return (int)(temp);
@@ -584,23 +551,23 @@ void CameraState()
 
 void setup()
 {
-  debug("Sensor Controller Started");
-  init_cloud_sensor();
   //Initially join the bus as slave device with address 0xA sensor board
   Wire.begin(MY_I2C_ADDRESS);
   //register receive event
   Wire.onReceive(receiveEvent);
   // register request event  
   Wire.onRequest(requestEvent);
+  delay(1000);
+  debug(PSTR("Sensor Ctrlr Start"));
+  init_cloud_sensor();
   CameraSetup();
   errorcount = 0;
   xbee.begin(9600);
-  debug("XBee Started");
+  debug(PSTR("XBee"));
   looptime = 0; 
 #ifdef WATCHDOGENABLE 
  wdt_enable(9);
 #endif
-  debugln();
 } //end setup()
 
 
@@ -612,7 +579,6 @@ void loop()
   wdt_reset();
 #endif
 
-  debugln();
   CameraState();
   while (millis() >= looptime)
   {
