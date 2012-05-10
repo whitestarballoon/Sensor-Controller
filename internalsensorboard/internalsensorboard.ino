@@ -1,18 +1,13 @@
-// Requires XBee Library version number ??
 
-
-
-
-boolean DEBUG = 0;// 1 enable 0 disable
-const boolean DEBUGOVERVIEW = 0;
-#define WATCHDOGENABLE
+//Includes
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
 #include <stdarg.h>
 #include <string.h>
 #include <XBee.h>
 #include <WSWire.h>
-/* define/reserve the pins */
+
+//Defines
 #define cloud_LEDPIN 11    //for cloud sensor detector
 #define SDAL_PIN 4  //whitestar I2C bus data line
 #define SCLL_PIN 5  //whitestar I2C bus clock line
@@ -24,34 +19,30 @@ const boolean DEBUGOVERVIEW = 0;
 #undef PROGMEM
 #define PROGMEM __attribute__((section(".progmem.data")))
 
-/* Camera PINS  */
+// Camera PINS
 #define CAMSWITCH 7 //  camera control pin
 const int MY_I2C_ADDRESS = 0xA;  //my address  0x14
 const int GROUNDSUPPORT = 0x7; //ground support boards address
 unsigned long debugtime = 0;
 
-unsigned long looptime; 
-
-int isb_command;  // command given by da boss
 /* ----- Variables support polling SHARP GP2Y1010AU0F dust sensor --- */
 #define TOOBIG_ULONG 0xFFFFD8F0  /* constant is the unsigned long limit - 10000 */
-unsigned long last_microsec;
-unsigned long sched_microsec;
-static unsigned int cloud_sum;
-static unsigned int runsum;
-static int runct;
-static int errorcount;
-static uint16_t freshcloud;
-static uint16_t freshtemp;
-static uint16_t freshhumid;
-static uint16_t externalTemp = 30; //set to room temp for testing REMOVE BEFORE FLIGHT
-volatile boolean f_wdt=1; //watchdog global flag
-int CamState = 0;
-unsigned long CamTimer;
-unsigned long autoCamTimer;
-int recording = 0;
+unsigned long last_microsec, sched_microsec, CamTimer, autoCamTimer;
+static unsigned int cloud_sum, runsum;
+static int runct, errorcount;
+static uint16_t freshcloud, freshtemp, freshhumid, externalTemp = 30; //set to room temp for testing REMOVE BEFORE FLIGHT
+int CamState = 0, recording = 0;
+
 byte printx=0;
 unsigned int wakecnt; //counts the number of times the system has gone through global loop after waking up
+
+//Random Variables
+boolean DEBUG = 0;// 1 enable 0 disable
+const boolean DEBUGOVERVIEW = 0;
+unsigned long looptime; 
+volatile boolean f_wdt=1; //watchdog global 
+int loop_time = 0, sleep_time, isb_command;  // command given by da boss
+
 /*
 FIO with Series 2 (ZigBee) XBee Radios only
  Receives I/O samples from a remote radio.
@@ -546,71 +537,47 @@ void CameraState()
 
 }
 
-
-/* ---------- main body of program -------------- */
-
-
 void setup()
 {
-#ifdef WATCHDOGENABLE 
- wdt_enable(9);
-#endif
-wdt_reset();
-  init_cloud_sensor();
-  wdt_reset();
+  wdt_enable(WDTO_8S);
+  delay(2000);
+  Serial.begin(57600);
+  Serial.print("Startup");
+  loop_time = 0;
+  wdt_reset(); //reset watchdog each run.
+  
   //Initially join the bus as slave device with address 0xA sensor board
   Wire.begin(MY_I2C_ADDRESS);
   //register receive event
   Wire.onReceive(receiveEvent);
   // register request event  
   Wire.onRequest(requestEvent);
-  wdt_reset();
-  delay(1000);
-  wdt_reset();
-  Serial.begin(57600);
   
-  Serial.println(F("Sensor Ctrlr Start"));
-  wdt_reset();
-  debug(PSTR("Sensor Ctrlr Start"));
+  Serial.println(" Sensor Ctrlr Start");
   wdt_reset();
   CameraSetup();
   wdt_reset();
   errorcount = 0;
   xbee.begin(9600);
-  debug(PSTR("XBee"));
-  looptime = 0; 
-  wdt_reset();	
+  //debug(PSTR("XBee"));
+  wdt_reset();
+  Serial.println("Setup complete");
 } //end setup()
-
-
 
 void loop()
 {
-
-#ifdef WATCHDOGENABLE 
-  //reset watchdog each run.
-  wdt_reset();
-#endif
-
+  wdt_reset(); //reset watchdog each run.
   CameraState();
-  while (millis() >= looptime)
-  {
-    //reordered so temp comes before humidity for maths purposes
-    freshcloud = read_cloud_sensor();
-    newdelay(10);
-    freshtemp = read_temp();
-    newdelay(10);
-    freshhumid = read_humid_sensor(externalTemp);
-    newdelay(10);
-    looptime = millis()+30000;
-	Serial.print(".");
-	if (printx<random(20,80)) {
-		printx++;
-		} else 
-		{
-		printx=0;
-		}
-  }
-  
-}//end loop()
-
+  loop_time = millis();
+   while (millis() - loop_time > 30000){
+      //reordered so temp comes before humidity for maths purposes
+      freshcloud = read_cloud_sensor();
+      newdelay(10);
+      freshtemp = read_temp();
+      newdelay(10);
+      freshhumid = read_humid_sensor(externalTemp);
+      newdelay(10);
+      wdt_reset();
+      Serial.print(".");
+    }
+}
