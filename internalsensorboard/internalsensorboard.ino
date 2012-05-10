@@ -4,7 +4,7 @@
 
 
 boolean DEBUG = 0;// 1 enable 0 disable
-const boolean DEBUGOVERVIEW = 1;
+const boolean DEBUGOVERVIEW = 0;
 #define WATCHDOGENABLE
 #include <avr/wdt.h>
 #include <avr/pgmspace.h>
@@ -28,7 +28,7 @@ const boolean DEBUGOVERVIEW = 1;
 #define CAMSWITCH 7 //  camera control pin
 const int MY_I2C_ADDRESS = 0xA;  //my address  0x14
 const int GROUNDSUPPORT = 0x7; //ground support boards address
-unsigned long debugtime;
+unsigned long debugtime = 0;
 
 unsigned long looptime; 
 
@@ -45,12 +45,12 @@ static uint16_t freshcloud;
 static uint16_t freshtemp;
 static uint16_t freshhumid;
 static uint16_t externalTemp = 30; //set to room temp for testing REMOVE BEFORE FLIGHT
-boolean debugready=0;
 volatile boolean f_wdt=1; //watchdog global flag
 int CamState = 0;
 unsigned long CamTimer;
 unsigned long autoCamTimer;
 int recording = 0;
+byte printx=0;
 unsigned int wakecnt; //counts the number of times the system has gone through global loop after waking up
 /*
 FIO with Series 2 (ZigBee) XBee Radios only
@@ -113,7 +113,7 @@ void receiveEvent(int howMany)
     }  
   case 0xE:
     { //record camera for 5 min
-      if (1 == DEBUG)
+      if (1 == DEBUGOVERVIEW)
       {
         debug(PSTR("CMD:CAM5"));
       }
@@ -125,7 +125,7 @@ void receiveEvent(int howMany)
 
   case 0xC:
     { //start camera record on command
-      if (1 == DEBUG)
+      if (1 == DEBUGOVERVIEW)
       {
         debug(PSTR("CMD:CAM ON"));
       }
@@ -136,7 +136,7 @@ void receiveEvent(int howMany)
 
   case 0xD:
     {  //stop camera on command
-      if (1 == DEBUG)
+      if (1 == DEBUGOVERVIEW)
       {
         debug(PSTR("CMD:CAM OFF"));
       }
@@ -151,9 +151,10 @@ void receiveEvent(int howMany)
 void requestEvent()
 {    
   byte reply_data[2];
+  
   if (1 == DEBUGOVERVIEW)
   {
-    debug(PSTR("i2c requested: %d"),isb_command);
+    //debug(PSTR("i2c requested: %d"),isb_command);
   }
   switch (isb_command) 
   { //toggle debuging mostly enable it
@@ -551,29 +552,41 @@ void CameraState()
 
 void setup()
 {
+#ifdef WATCHDOGENABLE 
+ wdt_enable(9);
+#endif
+wdt_reset();
+  init_cloud_sensor();
+  wdt_reset();
   //Initially join the bus as slave device with address 0xA sensor board
   Wire.begin(MY_I2C_ADDRESS);
   //register receive event
   Wire.onReceive(receiveEvent);
   // register request event  
   Wire.onRequest(requestEvent);
+  wdt_reset();
   delay(1000);
+  wdt_reset();
+  Serial.begin(57600);
+  
+  Serial.println(F("Sensor Ctrlr Start"));
+  wdt_reset();
   debug(PSTR("Sensor Ctrlr Start"));
-  init_cloud_sensor();
+  wdt_reset();
   CameraSetup();
+  wdt_reset();
   errorcount = 0;
   xbee.begin(9600);
   debug(PSTR("XBee"));
   looptime = 0; 
-#ifdef WATCHDOGENABLE 
- wdt_enable(9);
-#endif
+  wdt_reset();	
 } //end setup()
 
 
 
 void loop()
 {
+
 #ifdef WATCHDOGENABLE 
   //reset watchdog each run.
   wdt_reset();
@@ -590,7 +603,14 @@ void loop()
     freshhumid = read_humid_sensor(externalTemp);
     newdelay(10);
     looptime = millis()+30000;
-
+	Serial.print(".");
+	if (printx<random(20,80)) {
+		printx++;
+		} else 
+		{
+		printx=0;
+		}
   }
+  
 }//end loop()
 
